@@ -1,0 +1,78 @@
+==============================
+V1.1:  2024-07-03  00:54
+版本概述： 提供ex1,ex2,ex3, ex4,ex5, temp_tcp_thread目录下的程序，python能动态显示一根温度线
+实现功能如下：
+==============================
+ex1: 编写一个程序，每秒生成一个随机的温度数据（范围可以是-10到40度）。
+ex2:用C语言编写一个程序，每秒生成一个随机的温度数据（范围可以是-10到40度，变化幅度不超过1度）
+ex3: 将ex2的模拟的温度数据保存到文件中。
+ex4: 将ex3的模拟的设备生成的Id, 温度数据用JSON打包拆包
+ex5: 指定设备ID号，将温度数据用JSONG打包和拆包，然后将拆包后的设备ID和温度数据写入到SQLITE数据库中
+
+temp_tcp_thread: 温度模拟程序
+================================
+temp_tcp_thread目录下：
+执行make clean; make
+   --> 会删除数据库，重新生成可执行程序
+./server 5003   (5003为服务器端口号，可以任意指定5001-8000的端口)
+ ./client  127.0.0.1 5003 (其中，hoostar01为模拟的温度采集ID，127.0.0.1为服务器的IP, 5003为服务器端口）
+ 通过设置不同的设备ID（client后面的第一个参数，可以模拟不同的温度采集设备）
+python图形显示的chatgpt prompt:  
+============
+使用python GNU Plot或其他工具，每秒从sqlite3的数据库temperature_data.db中表Temperature读出Id和temperature字段的最后一行数据，用不同的颜色生成不同id的temperature温度数据绘制成图表，图标纵轴设置为温度(-10度-40度），横轴为100秒的时间刻度，每次刷新数据要往左移动一个刻度
+============
+python代码：
+============
+注意修改下面的代码：
+# 初始化数据库连接
+conn = sqlite3.connect('temperature_data.db')
+在temperature_data.db前面要加上数据的绝对路径
+------------------------
+import sqlite3
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
+# 初始化数据库连接
+conn = sqlite3.connect('temperature_data.db')
+cursor = conn.cursor()
+
+# 初始化图表
+fig, ax = plt.subplots()
+xdata, ydata = [], []
+ln, = plt.plot([], [], 'b-', animated=True)
+
+# 设置图表的轴范围
+ax.set_ylim(-10, 40)
+ax.set_xlim(0, 100)
+plt.xlabel('Time (s)')
+plt.ylabel('Temperature (°C)')
+plt.title('Real-time Temperature Monitoring')
+
+def init():
+    ln.set_data(xdata, ydata)
+    return ln,
+
+def update(frame):
+    cursor.execute('SELECT Temp FROM Temperature ORDER BY Id DESC LIMIT 1')
+    row = cursor.fetchone()
+    if row:
+        temp = row[0]
+        xdata.append(frame)
+        ydata.append(temp)
+        if len(xdata) > 100:
+            xdata.pop(0)
+            ydata.pop(0)
+        ln.set_data(xdata, ydata)
+        
+        # 更新x轴的范围，使图表向左移动
+        ax.set_xlim(frame - 100, frame)
+
+    return ln,
+
+# 动画函数，每秒更新一次
+ani = animation.FuncAnimation(fig, update, frames=range(1000), init_func=init, blit=True, interval=1000, repeat=False)
+
+plt.show()
+
+# 关闭数据库连接
+conn.close()
